@@ -28,3 +28,7 @@
 *.settings*
 *.DS_Store
 *.idea*
+
+.ccls-cache
+.vscode
+compile_commands.json
