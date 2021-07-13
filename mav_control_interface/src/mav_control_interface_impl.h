@@ -29,6 +29,7 @@
 #include <mav_control_interface/deadzone.h>
 #include <mav_control_interface/position_controller_interface.h>
 #include <mav_control_interface/rc_interface.h>
+#include <mav_dlidar_msgs/SafetyCheck.h>
 
 #include "state_machine.h"
 
@@ -56,7 +57,8 @@ class MavControlInterfaceImpl
 
   ros::ServiceServer takeoff_server_;
   ros::ServiceServer back_to_position_hold_server_;
-
+  ros::ServiceClient safety_check_service_client_;
+  bool enable_safety_check_;
   std::shared_ptr<RcInterfaceBase> rc_interface_;
 
   std::unique_ptr<state_machine::StateMachine> state_machine_;
@@ -70,6 +72,28 @@ class MavControlInterfaceImpl
   bool BackToPositionHoldCallback(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
 
   void publishAttitudeCommand(const mav_msgs::RollPitchYawrateThrust& command);
+
+  bool isSafe() {
+    mav_dlidar_msgs::SafetyCheck safe_check_msg;
+    mav_msgs::EigenTrajectoryPoint current_reference;
+    tf::Transform transform;
+    state_machine_->getCurrentReference(&current_reference, &transform);
+    tf::transformTFToMsg(transform, safe_check_msg.request.current_reference);
+
+    mav_msgs::EigenOdometry current_state;
+    state_machine_->getCurrentState(&current_state);
+    mav_msgs::msgOdometryFromEigen(current_state,
+                                   &safe_check_msg.request.odometry);
+
+    if (safety_check_service_client_.call(safe_check_msg)) {
+      if (safe_check_msg.response.isSafe)
+        return true;
+      else
+        return false;
+    } else {
+      return false;
+    }
+  }
 };
 
 } /* namespace mav_control_interface */

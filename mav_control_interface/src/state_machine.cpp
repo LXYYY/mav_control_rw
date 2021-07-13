@@ -77,18 +77,10 @@ void StateMachineDefinition::PublishStateInfo(const std::string& info)
 
 void StateMachineDefinition::PublishCurrentReference()
 {
-  ros::Time time_now = ros::Time::now();
-  mav_msgs::EigenTrajectoryPoint current_reference;
-  controller_->getCurrentReference(&current_reference);
-
-  tf::Quaternion q;
-  tf::Vector3 p;
-  tf::vectorEigenToTF(current_reference.position_W, p);
-  tf::quaternionEigenToTF(current_reference.orientation_W_B, q);
-
   tf::Transform transform;
-  transform.setOrigin(p);
-  transform.setRotation(q);
+  mav_msgs::EigenTrajectoryPoint current_reference;
+  getCurrentReference(&current_reference, &transform);
+  ros::Time time_now = ros::Time::now();
 
   transform_broadcaster_.sendTransform(
       tf::StampedTransform(transform, time_now, reference_frame_id_, nh_.getNamespace() + "/current_reference"));

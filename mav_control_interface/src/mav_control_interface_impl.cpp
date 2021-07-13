@@ -16,9 +16,10 @@
  */
 
 #include <Eigen/Geometry>
-#include <mav_msgs/default_topics.h>
+#include <mav_dlidar_msgs/SafetyCheck.h>
 #include <mav_msgs/AttitudeThrust.h>
 #include <mav_msgs/RollPitchYawrateThrust.h>
+#include <mav_msgs/default_topics.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 
 #include "mav_control_interface_impl.h"
@@ -28,13 +29,12 @@ namespace mav_control_interface {
 
 constexpr double MavControlInterfaceImpl::kOdometryWatchdogTimeout;
 
-MavControlInterfaceImpl::MavControlInterfaceImpl(ros::NodeHandle& nh, ros::NodeHandle& private_nh,
-                                                 std::shared_ptr<PositionControllerInterface> controller,
-                                                 std::shared_ptr<RcInterfaceBase> rc_interface)
-    : nh_(nh),
-      private_nh_(private_nh),
-      rc_interface_(rc_interface)
-{
+MavControlInterfaceImpl::MavControlInterfaceImpl(
+    ros::NodeHandle &nh, ros::NodeHandle &private_nh,
+    std::shared_ptr<PositionControllerInterface> controller,
+    std::shared_ptr<RcInterfaceBase> rc_interface)
+    : nh_(nh), private_nh_(private_nh), rc_interface_(rc_interface),
+      enable_safety_check_(false) {
   ros::NodeHandle interface_nh(private_nh, "control_interface");
 
   odometry_watchdog_ = nh_.createTimer(ros::Duration(kOdometryWatchdogTimeout),
@@ -57,6 +57,12 @@ MavControlInterfaceImpl::MavControlInterfaceImpl(ros::NodeHandle& nh, ros::NodeH
   back_to_position_hold_server_ = nh.advertiseService("back_to_position_hold",
                                                       &MavControlInterfaceImpl::BackToPositionHoldCallback,
                                                       this);
+
+  private_nh_.param<bool>("enable_safe_check", enable_safety_check_,
+                          enable_safety_check_);
+  if (enable_safety_check_)
+    safety_check_service_client_ =
+        nh_.serviceClient<mav_dlidar_msgs::SafetyCheck>("safety_check");
 
   state_machine_.reset(new state_machine::StateMachine(nh_, private_nh_, controller));
 
@@ -97,6 +103,9 @@ void MavControlInterfaceImpl::RcUpdatedCallback(const RcInterfaceBase& rc_interf
 {
   state_machine_->process_event(
       state_machine::RcUpdate(rc_interface_->getRcData(), rc_interface_->isActive(), rc_interface_->isOn()));
+  if (enable_safety_check_)
+    if (!isSafe())
+      state_machine_->process_event(state_machine::BackToPositionHold());
 }
 
 void MavControlInterfaceImpl::CommandPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg)

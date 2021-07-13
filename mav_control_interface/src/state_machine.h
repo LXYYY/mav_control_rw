@@ -35,6 +35,7 @@
 #include <mav_msgs/eigen_mav_msgs.h>
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
+#include <tf_conversions/tf_eigen.h>
 
 #include <mav_control_interface/position_controller_interface.h>
 #include <mav_control_interface/rc_interface.h>
@@ -202,6 +203,24 @@ class StateMachineDefinition : public msm_front::state_machine_def<StateMachineD
 
   void SetParameters(const Parameters& parameters);
 
+  // TODO(mikexyl): these feel not proper to be available from state machine
+  void getCurrentReference(mav_msgs::EigenTrajectoryPoint *current_reference,
+                           tf::Transform *transform) {
+    controller_->getCurrentReference(current_reference);
+
+    tf::Quaternion q;
+    tf::Vector3 p;
+    tf::vectorEigenToTF(current_reference->position_W, p);
+    tf::quaternionEigenToTF(current_reference->orientation_W_B, q);
+
+    transform->setOrigin(p);
+    transform->setRotation(q);
+  }
+
+  void getCurrentState(mav_msgs::EigenOdometry *current_state) {
+    *current_state = current_state_;
+  }
+
 private:
   static constexpr int64_t kOdometryOutdated_ns = 1000000000;
   bool use_rc_teleop_;
@@ -222,7 +241,6 @@ private:
   void PublishStateInfo(const std::string& info);
   void PublishCurrentReference();
   void PublishPredictedState();
-
   // Implementation of state machine:
 
   // States
